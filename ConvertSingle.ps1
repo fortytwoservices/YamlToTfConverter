@@ -42,12 +42,14 @@ function Handle-Query {
     }
 }
 
-function Handle-HuntingEntities { 
+function Handle-HuntingEntityQueries { 
     param(
         [Parameter(Mandatory = $true)]
         $query,
         $entityMappings
     )
+
+    # Idea based on https://goodworkaround.com/2022/10/25/deploying-sentinel-hunting-queries-using-terraform/
         
     $dupTracker = @{}
     $outputLines = @()
@@ -411,7 +413,7 @@ $terraformOutput = . {
     else {
         # If it contains "_0_" it most likely has entities in the query. Works for hunting rules.
         if ($yamlContent.query  -notmatch "_0_") {
-            Write-Output (Handle-HuntingEntities  -query $yamlContent.query -entityMappings $yamlContent.entityMappings)
+            Write-Output (Handle-HuntingEntityQueries  -query $yamlContent.query -entityMappings $yamlContent.entityMappings)
         }
         else {
             Write-Output (Handle-Query -query $yamlContent.query)
