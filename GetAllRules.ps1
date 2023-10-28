@@ -25,21 +25,22 @@ Function Search-AzureSentinelRepo {
 
                 # Get the link by calling the Search-AzureSentinelRepoForSingleGuid function
                 $link = Search-AzureSentinelRepoForSingleGuid -filePath $foundFile.FullName -guid $id
-                if ($null -eq $link){
+                if ($null -eq $link) {
                     Write-Host "$foundFile"
                 }
 
                 # Add the rule to the newRulesList hashtable
                 $newRulesList[$id] = @{
-                    Name = $name
+                    Name        = $name
                     Description = $description
-                    Type = $type
-                    Added = Get-Date
-                    Link = $link
-                    Enabled = $false  # Add this line to set Enabled to false
+                    Type        = $type
+                    Added       = Get-Date
+                    Link        = $link
+                    Enabled     = $false  # Add this line to set Enabled to false
                 }
             }
-        } catch {
+        }
+        catch {
             # You've been caught!
         }
     }
@@ -70,10 +71,12 @@ Function Search-AzureSentinelRepoForSingleGuid {
             $githubRawUrl = "${githubBaseRawUrl}${relativePathEncoded}".Replace("\", "/").Replace("C:/temp/Azure-Sentinel/", "")
             
             return $githubRawUrl
-        } else {
+        }
+        else {
             return $null
         }
-    } else {
+    }
+    else {
         return $null
     }
 }
@@ -87,7 +90,8 @@ if (Test-Path $existingRulesListPath) {
     if ($existingRulesList -isnot [PSCustomObject]) {
         $existingRulesList = @{}
     }
-} else {
+}
+else {
     $existingRulesList = @{}
 }
 
@@ -114,7 +118,8 @@ if (Test-Path $TempFolder) {
     Push-Location $TempFolder
     git pull
     Pop-Location
-} else {
+}
+else {
     git clone https://github.com/Azure/Azure-Sentinel.git $TempFolder
 }
 
@@ -128,6 +133,7 @@ foreach ($key in $newRulesList.Keys) {
         Write-Host "New rule added: $($newRulesList[$key].Name)"
     }
 }
+
 
 # Save updated existing rules list
 $existingRulesHashTable | ConvertTo-Json | Set-Content $existingRulesListPath

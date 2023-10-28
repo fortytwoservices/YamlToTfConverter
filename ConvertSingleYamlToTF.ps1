@@ -327,14 +327,14 @@ function Handle-HuntingTags {
     $Description = $Description -replace "`n|`r|'", ""
     $Description = $Description -replace "\\", "\\"
     $Description = $Description -replace "`"", "\`"" 
-    $Time = Get-Date
+    # $Time = Get-Date
 
     # Split the description into parts based on space
     $words = $Description -split ' '
     $descParts = @()
     $currentPart = ""
     foreach ($word in $words) {
-        if (($currentPart + " " + $word).Length -le 256) {
+        if (($currentPart + " " + $word).Length -le 150) { # Tags prop limit: 150chars - need to split it.
             if ($currentPart.Length -gt 0) {
                 $currentPart += " "
             }

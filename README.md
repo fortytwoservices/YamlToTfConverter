@@ -1,35 +1,45 @@
-# About
-This script is built to make updating community rules as simple and automatic as possible. All rules are kept in a JSON and to convert it you simply set it to "true" and run the ConversionRunner.ps1 file. 
+# Azure Sentinel Rule Updater
 
-The script is created in such a way that updating those rules already enabled will be able to maintain your status of the given key:value pair. As an example, if the version of your local file is the same as the community version but the query is differing, your old query will be kept as it thinks it is different because you have tuned the rule. If there is a new version, it will replace your tunings making you able to see the changes in the blade and leaves you with the task of reiterating the need of the update vs your own tunings or watchlist addition and so on. There are still more fields to add this functionality for, but as of now it works pretty well.
+## About
 
-## Prerequisite
-Install Powershell-YAML (also found at [Powershell Gallery](https://www.powershellgallery.com/))
+This PowerShell script automates the process of updating Azure Sentinel community rules. It keeps track of rule configurations in a JSON file. To enable or disable a rule, simply toggle the corresponding key-value pair in the JSON file and execute `ConversionRunner.ps1`.
 
-```
-Install-Module powershell-yaml
-```
-# Usage
+### Features
 
-### Convert a single rule (NRT, Schedule or Hunting)
-```
+- **Preservation of Settings**: When updating rules that are already enabled, your custom configurations, like query alterations or watchlist additions, are preserved.
+- **Version Comparison**: If a community rule gets updated, the script replaces your custom configurations only if the rule's version has changed. This allows you to review and decide whether to adopt the new update or keep your customizations.
+
+## Prerequisites
+
+1. PowerShell
+2. PowerShell-YAML Module: Install it using the following command or visit [PowerShell Gallery](https://www.powershellgallery.com/):
+
+    ```powershell
+    Install-Module powershell-yaml
+    ```
+
+## Usage
+
+### Convert a Single Rule (NRT, Scheduled, or Hunting)
+
+To convert a single YAML rule to Terraform (TF) format, use the following command:
+
+```powershell
 .\ConvertSingleYamlToTF.ps1 -filePath <PathOrURLToTheFile> [-fileOrUrl "url"]
 ```
 
-### Convert every enabled rule and update those that previously was converted
-
-First you need to populate the file in neede by running GetAllRules.ps1 and then run: 
-```
+## Batch Conversion and Update
+- **Initialize Rule List**: Run GetAllRules.ps1 to populate the JSON file with available rules.
+- **Enable Rules**: Edit the JSON file to set the rules you want to convert to true.
+- **Run the Conversion**:
+```powershell
 .\ConversionRunner.ps1
 ```
+- **Review**: Manually review to ensure all rules are correctly converted. Any bugs or features? Please feel free to raise an issue!
 
-Next up is simply going through and checking everything got converted correctly. These scripts has made me able to spot simple bugs at the community repo where rules have been misplaced or are missing different stuff. 
-
-## TODO: 
-- A little more fix to make the JSON stay intact across all runs (especially the "enabled" feature)
-- Paths with a square brackets is causing some issues leaving those rules without a link.
-- There are a few rules that in between everything I'm trying to catch, so I might have to do some more bughunting and open some issues, unless I can think of an easier way to detect them and bring them into this runner.
-- I know of at least one rule that is buggy, and will dive into why soon.
-- More fields to compare old vs new based on the current version will be added
-- Custom details will be added from community and not only from your old rule
-- Alert details override from community...
+# Known Issues and TODO
+- **URL Encoding**: Rules with square brackets in the path are currently not linked correctly.
+- **Bug Hunting**: Some rules may not be captured correctly, requiring further debugging.
+- **Rule Errors**: Investigate issues with specific rules that are not behaving as expected.
+- **Field Comparisons**: Add more fields for comparing new community rules against existing custom rules.
+- **Community Contributions**: Allow for custom details to be pulled from community contributions.
