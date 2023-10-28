@@ -17,6 +17,8 @@ Install-Module powershell-yaml
 ```
 
 ### Convert every enabled rule and update those that previously was converted
+
+First you need to populate the file in neede by running GetAllRules.ps1 and then run: 
 ```
 .\ConversionRunner.ps1
 ```
