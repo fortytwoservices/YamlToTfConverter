@@ -1,8 +1,19 @@
 [CmdletBinding()]
 Param (
     [Parameter(Mandatory = $true)]
-    [string]$filePath
+    [string]$filePath,
+    [string]$fileOrUrl,
+    [Parameter(Mandatory = $false)]
+    [string]$currentGuid,
+    [string]$custom_details,
+    [string]$alert_details_override,
+    [string]$ActualQuery,
+    [string]$ActualSeverity,
+    [string]$ActualConfig,
+    [string]$ActualStatus
 )
+
+# TODO: Add an anytrue() clause to the connector check for the TI tables.
 function Handle-EntityMapping {
     param(
         [Parameter(Mandatory = $true)]
@@ -30,16 +41,22 @@ function Handle-EntityMapping {
 function Handle-Query {
     param(
         [Parameter(Mandatory = $true)]
-        $query
+        $query,
+        $ActualQuery
     )
 
-    if ($null -ne $query) {
-        # Can be expanded to more escape sequences if needed: https://developer.hashicorp.com/terraform/language/expressions/strings
-        $query = $query -replace "\$\{", "`$`$`$`${" # seemingly differing escape patterns
-        Write-Output "`tquery = <<QUERY"
-        Write-Output ($query.Trim())        
-        Write-Output "`tQUERY"
+    # Can be expanded to more escape sequences if needed: https://developer.hashicorp.com/terraform/language/expressions/strings
+    $query = $query -replace "\$\{", "`$`$`$`${" # seemingly differing escape patterns
+
+    Write-Output "`tquery = <<QUERY"
+    if ([string]::IsNullOrEmpty($ActualQuery)) {
+        Write-Output ($query.Trim())
     }
+    else {
+        Write-Output ($ActualQuery.Trim())        
+    }
+    Write-Output "QUERY"
+
 }
 
 function Handle-HuntingEntityQueries { 
@@ -76,7 +93,6 @@ function Handle-HuntingEntityQueries {
     }
 
     if ($null -ne $query) {
-        $query = $query -replace "where", "`$`$`{"
         Write-Output "`tquery = <<QUERY"
         Write-Output ($query.Trim())        
 
@@ -87,17 +103,13 @@ function Handle-HuntingEntityQueries {
         Write-Output "`tQUERY"
     }
 }
-
-        
-    
-    
 function Handle-Version {
     param(
         [Parameter(Mandatory = $true)]
-        $version
+        $version,
+        $kind
     )
 
-    # Handling the version part
     if ($null -ne $version) {
         Write-Output ("`talert_rule_template_version = `"{0}`"" -f $version)
     }
@@ -105,14 +117,17 @@ function Handle-Version {
 function Handle-ID {
     param(
         [Parameter(Mandatory = $true)]
-        $id
+        $id,
+        $kind
     )
 
-    # Handling the version part
     if ($null -ne $id) {
-        Write-Output ("`talert_rule_template_guid = `"{0}`"" -f $id)
+        if ($kind -eq "Scheduled" -or $kind -eq "NRT") {
+            Write-Output "`talert_rule_template_guid = `"$id`""
+        }
     }
 }
+
 function Handle-DataConnectors {
     param(
         [Parameter(Mandatory = $true)]
@@ -244,12 +259,13 @@ function Handle-Tactics {
         [Parameter(Mandatory = $true)]
         $tactics
     )
-    if ($null -ne $tactics) {
-        $tacticsList = $tactics -join '","'
-        Write-Output ("`ttactics = [`n`t`t`"{0}`"`n`t]" -f $tacticsList)
+    if (([string]::IsNullOrEmpty($tactics))) {
+
+        Write-Output ("`ttactics = []")
     }
     else {
-        Write-Output ("`ttactics = []")
+        $tacticsList = $tactics -join '","'
+        Write-Output ("`ttactics = [`n`t`t`"{0}`"`n`t]" -f ($tacticsList -replace ' '))
     }
 }
 function Handle-Techniques {
@@ -257,27 +273,26 @@ function Handle-Techniques {
         [Parameter(Mandatory = $true)]
         $relevantTechniques
     )
-    if ($null -ne $relevantTechniques) {
-        # if tf ever gets possibility to add sub mitre attack values, use this:
-        # $relevantTechniquesList = $relevantTechniques.split -join '","'
+    
+    if ($null -ne $relevantTechniques -and $relevantTechniques.Count -gt 0) {
         $relevantTechniquesParts = foreach ($technique in $relevantTechniques) {
             $parts = $technique.Split(".")
             ($parts | Select-Object -First 1) -join '.'
         }
         $relevantTechniquesList = $relevantTechniquesParts -join '","'
-        Write-Output ("`ttechniques = [`n`t`t`"{0}`"`n`t]" -f $relevantTechniquesList)
         
-    }
-    else {
-        Write-Output ("`ttechniques = []") 
+        Write-Output ("`ttechniques = [`n`t`t`"{0}`"`n`t]" -f $relevantTechniquesList)
     }
 }
-function Handle-HuntingTags {
+
+<# function Handle-HuntingTags {
     Param(
         [Parameter(Mandatory = $true)]
         $Tactics,
         $Techniques,
-        $Description
+        $Description,
+        $version,
+        $id
         # $Creator # Optional
     )
     $Description = $description -replace "`n|`r|'", ""
@@ -289,23 +304,93 @@ function Handle-HuntingTags {
         `"tactics`" = `"$($Tactics -ne $null ? ($Tactics.split(" ") -join ",") : """")`"
         `"techniques`" = `"$($Techniques -ne $null ? ($Techniques.split(" ") -join ",") : """")`",
         `"description`": `"$Description`",
-        `"createdTimeUtc`":`"$Time`" 
+        `"id`" = `"$id`", 
+        `"alert_rule_template_version`": `"$version`"
     } "
 
 
     # Optional: `"createdBy`":`"$Creator`",
+    # Optional: `"createdTimeUtc`":`"$Time`" ,
+
+} #>
+
+function Handle-HuntingTags {
+    Param(
+        [Parameter(Mandatory = $true)]
+        $Tactics,
+        $Techniques,
+        $Description,
+        $version,
+        $id
+        # $Creator # Optional
+    )
+    $Description = $Description -replace "`n|`r|'", ""
+    $Description = $Description -replace "\\", "\\"
+    $Description = $Description -replace "`"", "\`"" 
+    $Time = Get-Date
+
+    # Split the description into parts based on space
+    $words = $Description -split ' '
+    $descParts = @()
+    $currentPart = ""
+    foreach ($word in $words) {
+        if (($currentPart + " " + $word).Length -le 256) {
+            if ($currentPart.Length -gt 0) {
+                $currentPart += " "
+            }
+            $currentPart += $word
+        } else {
+            $descParts += $currentPart
+            $currentPart = $word
+        }
+    }
+    if ($currentPart.Length -gt 0) {
+        $descParts += $currentPart
+    }
+
+    # Create descriptionX variables
+    $descJsonParts = @()
+    $i = 1
+    foreach ($part in $descParts) {
+        $descJsonParts += "`"description$i`": `"$part`""
+        $i++
+    }
+    $descJson = $descJsonParts -join ",`n"
+
+    Write-Output "tags = {
+        `"tactics`" = `"$($Tactics -ne $null ? ($Tactics.split(" ") -join ",") : """")`"
+        `"techniques`" = `"$($Techniques -ne $null ? ($Techniques.split(" ") -join ",") : """")`",
+        $descJson,
+        `"id`" = `"$id`", 
+        `"alert_rule_template_version`": `"$version`"
+    } "
+
+    # Optional: `"createdBy`":`"$ Creator`",
+    # Optional: `"createdTimeUtc`":`"$Time`" ,
 
 }
 
-# Check if the file exists
-if (!(Test-Path $filePath)) {
+
+# Check if the file or URL exists
+if ($fileOrUrl -eq "filepath" -and !(Test-Path $filePath)) {
     Write-Error "File $filePath does not exist."
     return
 }
 
-# Current rule GUID
-$currentGuid = New-Guid
-$yamlContent = ConvertFrom-Yaml (Get-Content $filePath -Raw)
+# Read YAML content based on the type of input
+if ($fileOrUrl -eq "url") {
+    $webClient = New-Object System.Net.WebClient
+    $yamlContentRaw = $webClient.DownloadString($filePath)
+}
+else {
+    $yamlContentRaw = Get-Content $filePath -Raw
+}
+
+# Use the passed-in GUID if available, otherwise generate a new one
+if (-Not $currentGuid) {
+    $currentGuid = New-Guid
+}
+$yamlContent = ConvertFrom-Yaml $yamlContentRaw
 if ($null -eq $yamlContent.query) {
     Write-Warning "YAML file at $filePath is missing 'query' field. Skipping this file."
     continue
@@ -332,7 +417,12 @@ $terraformOutput = . {
     }
     if ($yamlContent.kind -eq "Scheduled" -or $yamlContent.kind -eq "NRT") {    
         if ($null -ne $yamlContent.severity) {
-            Write-Output (Handle-Severity -severity $yamlContent.severity)
+            if (([string]::IsNullOrEmpty($ActualSeverity))) {
+                Write-Output (Handle-Severity -severity $yamlContent.severity)
+            }
+            else {
+                Write-Output (Handle-Severity -severity $ActualSeverity)
+            }
         }
     
         if ($null -ne $yamlContent.description) {
@@ -340,26 +430,39 @@ $terraformOutput = . {
         }
     }
 
+    if ($yamlContent.kind -eq "Scheduled" -or $yamlContent.kind -eq "NRT") {
+        if (([string]::IsNullOrEmpty($ActualStatus))) {
+            Write-Output ("`tenabled = true`n")
+        }
+        else {
+            Write-Output ("`tenabled = " + $ActualStatus + "`n")
+
+        }
+    } # TODO: Create an alternative grouping block for nrt rules (they seem to differ somehow): https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/sentinel_alert_rule_nrt
+
     if ($yamlContent.kind -eq "Scheduled") {
-        Write-Output ("`tenabled = true`n")
-
-        # Hardcoded, as yaml file does not include this:
-        Write-Output("
-        // BEGIN hardcoded block, remove comments once set to wanted values (These blocks are optional)
-        `tevent_grouping {
-        `t`taggregation_method = `"AlertPerResult`"
-        `t}
-
-        `tincident_configuration {
-        `t`tcreate_incident = true
-        `t`tgrouping {
-        `t`tenabled                = true
-        `t`tentity_matching_method = `"AllEntities`"
-        `t`tlookback_duration      = `"PT8H`"
-        `t`t}
-        `t}
-        // END")
-
+        if ($null -ne $ActualConfig) {
+            Write-Output("`tevent_grouping {
+                `taggregation_method = `"AlertPerResult`"
+                }
+        `n" + $ActualConfig + "`n")    
+        }
+        else {
+            # Hardcoded, as yaml file does not include this:
+            Write-Output("`tevent_grouping {
+                `t`taggregation_method = `"AlertPerResult`"
+                `t}
+        
+                `tincident_configuration {
+                `t`tcreate_incident = true
+                `t`tgrouping {
+                `t`tenabled                = true
+                `t`tentity_matching_method = `"AllEntities`"
+                `t`tlookback_duration      = `"PT8H`"
+                `t`t}
+                `t}
+                ")
+        }
         if ($null -ne $yamlContent.queryPeriod) {
             Write-Output (Handle-QueryPeriod -queryPeriod $yamlContent.queryPeriod)
         }
@@ -380,6 +483,7 @@ $terraformOutput = . {
         if ($null -ne $yamlContent.tactics) {
             Write-Output (Handle-Tactics -tactics $yamlContent.tactics)
         }
+        
         if ($null -ne $yamlContent.relevantTechniques) {
             Write-Output (Handle-Techniques -relevantTechniques $yamlContent.relevantTechniques)
         }
@@ -387,42 +491,51 @@ $terraformOutput = . {
         if ($null -ne $yamlContent.entityMappings) {
             Write-Output (Handle-EntityMapping -entityMappings $yamlContent.entityMappings)
         }
+
+        if ($alert_details_override) {
+            Write-Output($alert_details_override)
+        }
+
+        if ($custom_details) {
+            Write-Output($custom_details)
+        }
+
+
     }
     if ($null -ne $yamlContent.id) {
-        Write-Output (Handle-ID -id $yamlContent.id)
+        Write-Output (Handle-ID -id $yamlContent.id -kind $yamlContent.kind)
     }
-    if ($null -ne $yamlContent.version) {
-        Write-Output (Handle-Version -version $yamlContent.version)
+    if ($yamlContent.kind -eq "Scheduled" -or $yamlContent.kind -eq "NRT") {    
+
+        if ($null -ne $yamlContent.version) {
+            Write-Output (Handle-Version -version $yamlContent.version -kind $yamlContent.kind)
+        }
     }
 
     if ($yamlContent.kind -ne "Scheduled" -and $yamlContent.kind -ne "NRT") {   
         if ($null -ne $yamlContent.tactics) {
-
-            Write-Output(Handle-HuntingTags -Tactics $yamlContent.tactics -Techniques $yamlContent.relevantTechniques -Description $yamlContent.description)
+            Write-Output("category = `"Hunting Queries`"")
+            Write-Output(Handle-HuntingTags -Tactics $yamlContent.tactics -Techniques $yamlContent.relevantTechniques -Description $yamlContent.description -version $yamlContent.version -id $yamlContent.id)
         }
     }
 
 
 
-    if ($yamlContent.kind -eq "Scheduled" -and $yamlContent.kind -eq "NRT") {
+    if ($yamlContent.kind -eq "Scheduled" -or $yamlContent.kind -eq "NRT") {
         if ($null -ne $yamlContent.query) {
-            Write-Output (Handle-Query -query $yamlContent.query)
+            Write-Output (Handle-Query -query $yamlContent.query -ActualQuery $ActualQuery)
 
         }
     }
     else {
         # If it contains "_0_" it most likely has entities in the query. Works for hunting rules.
-        if ($yamlContent.query  -notmatch "_0_") {
+        if ($yamlContent.query -notmatch "_0_") {
             Write-Output (Handle-HuntingEntityQueries  -query $yamlContent.query -entityMappings $yamlContent.entityMappings)
         }
         else {
             Write-Output (Handle-Query -query $yamlContent.query)
-
-
         }
     }
-
-
 
     # Closing variable and bracket
     Write-Output ("`tlog_analytics_workspace_id = var.log_analytics_workspace_id`n}")
@@ -431,5 +544,4 @@ $terraformOutput = . {
 Write-Output($terraformOutput)
 
 
-
-# TODO: add metadata https://github.com/hashicorp/terraform-provider-azurerm/blob/78a74423d9f084fa0f5453ef33b31f522a37eb1b/website/docs/r/sentinel_metadata.html.markdown?plain=1#L73
+#TODO add conversion for alert details override: https://github.com/Azure/Azure-Sentinel/blob/7f1b9e743f19f4a084c946e7152ab79a56d71b0e/Solutions/Theom/Analytic%20Rules/TRIS0012_Dev_secrets_exposed.yaml#L22

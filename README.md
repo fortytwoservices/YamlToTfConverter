@@ -1,6 +1,7 @@
 # About
-This script will convert any community rules found at [Azure Sentinel's Github](https://github.com/Azure/Azure-Sentinel/tree/f34ee344c20bf443c6c51305430d5df5ec250872) and probably at other resources as well.
-First it clones the repo into a temp folder on C:\temp and then scans through it looking for rules. You can go for conversion for a single file and it should convert it according to the type, limited to NRT, Scheduled and Hunting rules or change every rule from any of the three category types or even every rule.
+This script is built to make updating community rules as simple and automatic as possible. All rules are kept in a JSON and to convert it you simply set it to "true" and run the ConversionRunner.ps1 file. 
+
+The script is created in such a way that updating those rules already enabled will be able to maintain your status of the given key:value pair. As an example, if the version of your local file is the same as the community version but the query is differing, your old query will be kept as it thinks it is different because you have tuned the rule. If there is a new version, it will replace your tunings making you able to see the changes in the blade and leaves you with the task of reiterating the need of the update vs your own tunings or watchlist addition and so on. There are still more fields to add this functionality for, but as of now it works pretty well.
 
 ## Prerequisite
 Install Powershell-YAML (also found at [Powershell Gallery](https://www.powershellgallery.com/))
@@ -12,34 +13,21 @@ Install-Module powershell-yaml
 
 ### Convert a single rule (NRT, Schedule or Hunting)
 ```
-& .\ConvertSingle.ps1 -filePath <PathToTheFile>
+.\ConvertSingleYamlToTF.ps1 -filePath <PathOrURLToTheFile> [-fileOrUrl "url"]
 ```
 
-### Convert All the Scheduled rules
-You specify the type: ***Scheduled, NRT, Hunting or All*** and optionally specify the output path by ***-OutPath***, this is by default set to the script path if not used.
+### Convert every enabled rule and update those that previously was converted
 ```
-& .\ConvertAll.ps1 -Type "Scheduled" -OutPath ".\ScheduledRules"
-```
-
-```
-& .\ConvertAll.ps1 -Type "NRT" -OutPath ".\NRT"
+.\ConversionRunner.ps1
 ```
 
-```
-& .\ConvertAll.ps1 -Type "Hunting" -OutPath ".\Hunting"
-```
-
-```
-& .\ConvertAll.ps1 -Type "All" -OutPath ".\All"
-```
-
-### Format the output:
-```
-terraform fmt -recursive
-```
+Next up is simply going through and checking everything got converted correctly. These scripts has made me able to spot simple bugs at the community repo where rules have been misplaced or are missing different stuff. 
 
 ## TODO: 
-- more testing to see if all rule differences have been caught
-- extend more options according to terraform language (comments in code)
-- Consider changing content building using "Write-Output", maybe aim for string building?
-- Hunting rules are a bit messy as they use Saved Search and are poorly documented - more testing on each outputed rule
+- A little more fix to make the JSON stay intact across all runs (especially the "enabled" feature)
+- Paths with a square brackets is causing some issues leaving those rules without a link.
+- There are a few rules that in between everything I'm trying to catch, so I might have to do some more bughunting and open some issues, unless I can think of an easier way to detect them and bring them into this runner.
+- I know of at least one rule that is buggy, and will dive into why soon.
+- More fields to compare old vs new based on the current version will be added
+- Custom details will be added from community and not only from your old rule
+- Alert details override from community...
