@@ -57,7 +57,8 @@ Function Search-AzureSentinelRepoForSingleGuid {
     $githubBaseRawUrl = "https://raw.githubusercontent.com/Azure/Azure-Sentinel/master/"
 
     # Check if the file exists and is valid
-    if (Test-Path -Path $filePath -PathType Leaf) {
+    $escapedFilePath = $filePath -replace '\[', '`[' -replace '\]', '`]'
+    if (Test-Path -Path $escapedFilePath -PathType Leaf) {
         $content = Get-Content -LiteralPath $filePath -Raw
         if ($null -eq $content) {
             Write-Host "Skipping empty or invalid file: $($filePath)"
